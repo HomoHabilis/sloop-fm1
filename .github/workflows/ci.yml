@@ -1,0 +1,119 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Two jobs, so the update path is tested even when JieLi's download server is out of reach:
+#   host      no toolchain: the whole host suite (tests/run_host_tests.sh), the update path replayed
+#             against the released 2.3 package, the freeze of the update-path files, clang's front end
+#             over the firmware with each build option
+#   firmware  the JieLi toolchain (pkgman.jieliapp.com) cross-compiles SLOOP, the full suite runs on
+#             that build (target cost too), its package is checked against 2.3 and kept as an artifact
+# The three AC79 SDK files the package needs come out of the released package (tools/fwsc_unpack.py,
+# checked against tools/build.py's SHA-256s): no SDK checkout from gitee.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python packages
+        run: pip install Pillow
+      - name: Update path frozen
+        run: python3 tests/update_freeze.py
+      - name: Update package against the released 2.3
+        run: python3 tests/pkg_test.py
+      - name: Host tests (no toolchain)
+        env:
+          SOAK_MIN: "3"
+        run: sh tests/run_host_tests.sh
+
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      BASE_SHA: d691ba7b2d922f1a1f41a3622cffe29ce41c5506   # SLOOP 2.3 as released: the reference build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python packages
+        run: pip install Pillow
+      - name: JieLi toolchain (cached)
+        id: tc
+        uses: actions/cache@v4
+        with:
+          path: ~/.jieli
+          key: jieli-toolchain-f686586b
+      - name: JieLi toolchain, pinned and SHA-256 checked (a cached one is checked too)
+        run: |
+          for i in 1 2 3; do sh tools/get_toolchain.sh && break; sleep $((i * 10)); done
+          test -x ~/.jieli/toolchain/pi32v2/bin/clang
+      - name: AC79 SDK files from the released package
+        run: python3 tools/fwsc_unpack.py docs/firmware/sloop-2.3.fwsc build/standin --sdk-dir "$HOME/ac79-sdk"
+      - name: Build (the build date is the commit's, SOURCE_DATE_EPOCH)
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          sh build.sh
+      - name: Reproducible - a second build gives the same package, byte for byte
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          cp build/felucca.fwsc /tmp/first.fwsc
+          sh build.sh > /tmp/second-build.log 2>&1 || { tail -20 /tmp/second-build.log; exit 1; }
+          cmp /tmp/first.fwsc build/felucca.fwsc
+          echo "same package: $(sha256sum build/felucca.fwsc)"
+      - name: The released 2.3 package rebuilds byte for byte from its sources (and their target cost)
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          git worktree add /tmp/base "$BASE_SHA"
+          # 2.3 has no FELUCCA_BUILD_DATE: its __DATE__ becomes the date the package carries ("Oct  6 2026")
+          sed -i 's/__DATE__/"Oct  6 2026"/g' /tmp/base/firmware/src/ui_menu.c
+          (cd /tmp/base && sh build.sh > /tmp/base-build.log 2>&1) || { tail -20 /tmp/base-build.log; exit 1; }
+          (cd /tmp/base && python3 tests/target_budget.py build/felucca.dis tests/target_budget.txt) || true
+          cmp /tmp/base/build/felucca.fwsc docs/firmware/sloop-2.3.fwsc
+          echo "docs/firmware/sloop-2.3.fwsc == a build of $BASE_SHA: $(sha256sum docs/firmware/sloop-2.3.fwsc)"
+      - name: Full test suite on the build
+        env:
+          SOAK_MIN: "3"
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          sh tests/run_tests.sh
+      - name: Package against the released 2.3 (layout, SDK parts, loader compared)
+        run: python3 tests/pkg_test.py build/felucca.fwsc
+      - name: Disassembly and test outputs (also when a step failed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sloop-build-diag-${{ github.sha }}
+          path: |
+            build/felucca.dis
+            build/loader/loader.dis
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sloop-fwsc-${{ github.sha }}
+          path: |
+            build/felucca.fwsc
+            build/felucca.bin
+            build/loader/ota.bin
+          if-no-files-found: error

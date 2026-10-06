@@ -4,6 +4,10 @@
 # SLOOP 2.0 (reviewed): analog +9 % (drive crossfade, phase reset), lofi +4 % (input clamp), slicer on
 # the sample-accurate clock (its divides are per step / per block, not per sample: the per-sample
 # loop has none), the mix out of the ISR into its own function (fm1_alnk0_irq calls it).
+# SLOOP 2.3 as released already measured drums_mix 6634 and fm1_alnk0_irq 255 (its USB audio tap in
+# audio.c's per-block loop) with the JieLi toolchain of tools/get_toolchain.sh, but this file kept the
+# 2.0 values: recorded here from CI's reference build of the 2.3 sources (.github/workflows/ci.yml),
+# which the MIDI OUT build matches (fm1_alnk0_irq 221 instructions, 2.3 222).
 analog_render 638
 digital_render 333
 phase_render 79
@@ -17,5 +21,5 @@ drawbar_block 102
 grain_render 1734
 grain_block 138
 slicer_track 825
-drums_mix 6153
-fm1_alnk0_irq 174
+drums_mix 6634
+fm1_alnk0_irq 255

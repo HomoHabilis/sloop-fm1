@@ -139,6 +139,16 @@ int main(int argc, char **argv)
     open_family(FAM_SEQ); ui.force = 1; frame(); ppm("page-step");
     open_family(FAM_GLO); ui.force = 1; frame(); ppm("page-global");
     open_family(FAM_GLO); ui.force = 1; frame(); ppm("page-master");
+    open_family(FAM_GLO); open_family(FAM_GLO); open_family(FAM_GLO);   /* SYSTEM, DRUMS, MIDI OUT */
+    ui.force = 1; frame();
+    check(cur_page()->scope == SC_MOUT, "GLO: the fifth page is MIDI OUT");
+    encs[panel.enc[EN_K1]] = panel.dir[EN_K1]; frame();
+    encs[panel.enc[EN_K2]] = 4 * panel.dir[EN_K2]; frame();
+    encs[panel.enc[EN_K3]] = panel.dir[EN_K3]; frame();
+    check(mout_mode[0] == MO_EXT && mout_chan[0] == 5 && mout_clk == 1 && mout_mode[1] == MO_INT,
+          "MIDI OUT: KNOB 1 OUT, KNOB 2 CH, KNOB 3 CLK (the selected track only)");
+    ui.force = 1; frame(); ppm("page-midi-out");
+    mout_from_word(0);                                  /* (back to the defaults for the rest) */
     open_family(FAM_SCL); ui.force = 1; frame(); ppm("page-scale");
 
     /* ---- taps open pages, holds are layers */

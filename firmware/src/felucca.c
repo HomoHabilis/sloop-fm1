@@ -48,6 +48,8 @@
 #if FELUCCA_UART
 #include "midi_uart.c"
 #endif
+#include "midi_out.c"         /* MIDI OUT: the tracks play external gear over USB */
+#include "usb_guard.c"        /* a full MIDI in ring never holds back the update (main loop, ota_idle) */
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"
 #include "seq.c"
@@ -129,6 +131,7 @@ static void ota_idle(void)
 {
     fm1_wdt_feed();
     if (recovery_active) recovery_poll();
+    else usb_in_guard(fm1_ms);               /* (an update session blocks the main loop) */
 }
 static int ota_in_area(uint32_t off, uint32_t n) { return FL_IN(off, n, OTA_AREA, OTA_AREA + OTA_AREA_LEN); }
 static int ota_erase(uint32_t off)

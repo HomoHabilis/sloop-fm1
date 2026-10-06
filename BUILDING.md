@@ -46,6 +46,16 @@ On Linux x86-64 the toolchain runs natively and Docker is not needed.
 ./build.sh
 ```
 
+`tools/get_toolchain.sh` installs the toolchain pinned by SHA-256
+(`jieli-linux-toolchains-20250805.1.tar.xz`, from JieLi's Aliyun bucket or pkgman): nothing is
+installed unless the download matches, an install that already matches is kept, and
+`JIELI_TOOLCHAIN_URL` + `JIELI_TOOLCHAIN_SHA256` select another one.
+
+**Reproducible builds.** The build date on the ABOUT page is the only time stamp in the image.
+`SOURCE_DATE_EPOCH=<seconds> ./build.sh` sets it, and then the same sources and toolchain give the
+same package byte for byte. CI uses the commit's time, builds twice and compares, and rebuilds the
+released 2.3 from its own sources to check it against `docs/firmware/sloop-2.3.fwsc`.
+
 `JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations
 (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`).
 
@@ -61,6 +71,9 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`):
 | `FELUCCA_CDC` | 1 | USB serial console |
 | `FELUCCA_UAC` | 1 | USB audio input: the master output, 44.1 kHz stereo (after Felucca 1.0) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN (the 3.5 mm jack) |
+
+MIDI OUT (`firmware/src/midi_out.c`) is always built: it only sends while a track is set to MIDI or
+BOTH, or CLK is on.
 
 ## Samples
 
@@ -79,6 +92,35 @@ Runs the host tests (flash storage, user presets, MIDI parser, update entry, upd
 loader, a DSP render, the 4-track mix, project formats, the SLICER, the regression suite,
 the command-line installer) and, with Node.js, the web page tests. Run it after `./build.sh`
 (it uses `build/` and needs `AC79_SDK` set as for the build).
+
+Without the JieLi toolchain (or the SDK checkout), `tests/run_host_tests.sh [PKG.fwsc]` runs the
+same suite: it generates `build/gen` (Python only), lets the released `docs/firmware/sloop-2.3.fwsc`
+stand in for the target build, takes the three SDK files out of it (`tools/fwsc_unpack.py`, checked
+against the SHA-256s above) and first runs clang's front end over the firmware with each build option.
+Every C test is built from the sources of the tree; only the cross-compile and its cost need the
+toolchain. GitHub Actions (`.github/workflows/ci.yml`) runs it on every push, and a second job
+cross-compiles with the JieLi toolchain, runs `tests/run_tests.sh` on the build and keeps the package.
+
+The update path is guarded twice:
+
+- `tests/update_freeze.py`: the SHA-256 of every file the update path is built from (the update
+  loader and what it includes, the update entry `ota.c`, the USB rescue, the boot path, `storage.c`,
+  the packager, the installers and the released package). A change fails the tests until it is
+  reviewed, tested (ideally an install on a real FM-1 from the previous release) and recorded with
+  `python3 tests/update_freeze.py --update`.
+- `tests/usb_sim_test.c` (built with `-DSIM_APP` and `-DSIM_LOADER`): the real USB driver
+  (`firmware/src/usb.c`) on a simulated USB device controller, against a simulated host that
+  enumerates the FM-1 and serves the package as the installers do. Whole update sessions run
+  through it in normal mode, in the USB rescue and in the update loader, with the computer's other
+  MIDI traffic mixed in (notes, a DAW's clock), the FM-1's MIDI out busy, the audio dead, a replug
+  in the middle (nothing committed, the next try succeeds), a request lost and the host not reading
+  for 3 s, a byte damaged on the way. `-DRECOVERY_SRC='"path"' -DNO_USB_GUARD` runs it against
+  another `recovery.c` without `usb_guard.c` (2.3's: its rescue fails under MIDI traffic).
+- `tests/pkg_test.py [NEW.fwsc]`: the released package taken apart with every CRC checked and built
+  again byte for byte by `tools/fm1pkg_make.py`; single-bit damage refused; a new build's package has
+  the released flash head, SPL, chip key and SDK parts, and its update loader is compared with 2.3's
+  (`STRICT_LOADER=1`: must be identical). It also checks that the published installer page inlines the
+  tested `web/fm1ota.js` and `web/fm1pkg.js` line for line.
 
 The regression suite (`tests/regress.c`) renders every engine and preset and compares a
 hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU

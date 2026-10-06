@@ -426,9 +426,14 @@ typedef struct {
 #endif
     uint32_t lights;                               /* SLOOP 2.3: the backlight (panel.c lights_word); appended,
                                                     * so 2.2 still reads its part (st_load cuts at its size) */
+    uint32_t midi;                                 /* SLOOP 2.4: MIDI OUT (midi_out.c mout_word); appended the same
+                                                    * way: 2.2 and 2.3 read their part, 0 = every track INT */
 } persist_t;
 #define PERSIST_SIZE_V22 __builtin_offsetof(persist_t, lights)   /* the settings as 2.2 wrote them (no lights) */
-_Static_assert(sizeof(persist_t) == PERSIST_SIZE_V22 + 4u, "lights: the last word, no padding before it");
+#define PERSIST_SIZE_V23 __builtin_offsetof(persist_t, midi)     /* .. as 2.3 wrote them (no MIDI OUT) */
+_Static_assert(PERSIST_SIZE_V23 == PERSIST_SIZE_V22 + 4u, "lights: right after the 2.2 part, no padding before it");
+_Static_assert(sizeof(persist_t) == PERSIST_SIZE_V23 + 4u, "midi: the last word, no padding before it");
+static int persist_size_ok(int n) { return n == (int)sizeof(persist_t) || n == (int)PERSIST_SIZE_V23 || n == (int)PERSIST_SIZE_V22; }
 #if FELUCCA_ARRANGER
 #define PERSIST_MAGIC 0x50455233u                  /* "PER3": includes the song order */
 #else
@@ -461,7 +466,9 @@ static void persist_boot(void)                    /* before settings_init / pane
         int n = st_load(OBJ_SETTINGS, &p, sizeof p);
         if (n == (int)PERSIST_SIZE_V22 && p.magic == PERSIST_MAGIC)
             p.lights = 0;                          /* from 2.2: backlight off */
-        if (((n == (int)sizeof p || n == (int)PERSIST_SIZE_V22) && p.magic == PERSIST_MAGIC)
+        if (n >= 0 && n < (int)sizeof p)
+            p.midi = 0;                            /* from 2.2 / 2.3: no MIDI OUT */
+        if ((persist_size_ok(n) && p.magic == PERSIST_MAGIC)
 #if FELUCCA_ARRANGER
             || (n == (int)(16u + sizeof(panel_t)) && p.magic == 0x50455232u)
 #endif
@@ -472,10 +479,13 @@ static void persist_boot(void)                    /* before settings_init / pane
             settings.zoom = p.zoom;
             if (p.panel.magic == PANEL_MAGIC)
                 panel = p.panel;
-            if (p.magic == PERSIST_MAGIC)
+            if (p.magic == PERSIST_MAGIC) {
                 lights_from_word(p.lights);
-            else
+                mout_from_word(p.midi);
+            } else {
                 p.lights = 0;
+                p.midi = 0;
+            }
 #if FELUCCA_ARRANGER
             if (p.magic == PERSIST_MAGIC && arr_valid(&p.arrangement, 15u))
                 arrangement = p.arrangement;
@@ -523,6 +533,7 @@ static void persist_fill(persist_t *p)              /* the settings as they are 
     p->zoom = settings.zoom;
     p->panel = panel;
     p->lights = lights_word();
+    p->midi = mout_word();
 #if FELUCCA_ARRANGER
     p->arrangement = arrangement;
 #endif
@@ -568,7 +579,7 @@ static int panel_valid(const panel_t *q)           /* a permutation of the butto
 static uint32_t settings_restore(const void *raw, uint32_t n)
 {
     persist_t p;
-    if (n != sizeof p && n != PERSIST_SIZE_V22)
+    if (!persist_size_ok((int)n))                  /* (a 2.2 or 2.3 backup: MIDI OUT back to INT) */
         return 2;
     memset(&p, 0, sizeof p);
     memcpy(&p, raw, n);
@@ -589,6 +600,7 @@ static uint32_t settings_restore(const void *raw, uint32_t n)
     arrangement = p.arrangement;
 #endif
     lights_from_word(p.lights);
+    mout_from_word(p.midi);
     song.g[G_SYNC] = (int16_t)lights_sync;
     palette_set(settings.palette);
     fx_lowcut = (uint8_t)(settings.lowcut != 0);
@@ -700,6 +712,16 @@ static void sections_flush(void)                        /* main loop */
     if ((uint32_t)song.g[G_SYNC] != lights_sync) {      /* GLO > SYSTEM > SYNC: kept with the settings */
         lights_sync = (uint8_t)song.g[G_SYNC];
         settings_later = 1;
+    }
+    {   /* GLO > MIDI OUT: a setting of the FM-1 too */
+        static uint32_t mout_seen;
+        static uint8_t mout_init;
+        uint32_t w = mout_word();
+        if (!mout_init)
+            mout_init = 1;
+        else if (w != mout_seen)
+            settings_later = 1;
+        mout_seen = w;
     }
     if (settings_later) {                               /* the menu closed while playing */
         settings_later = 0;
