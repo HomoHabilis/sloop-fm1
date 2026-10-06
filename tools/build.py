@@ -5,6 +5,11 @@
 
   tools/build.py [--release X.Y[-suffix]]
 
+SOURCE_DATE_EPOCH (seconds, as reproducible-builds.org) sets the build date of the ABOUT page
+(FELUCCA_BUILD_DATE), the only time stamp in the image: the same sources, toolchain and date give
+the same package byte for byte (after flowstate-fm1, Zakaria Chowdhury). Unset: the compiler's
+__DATE__, as before.
+
 Outputs in build/: felucca.bin (app), loader/ota.bin (update loader),
 felucca.fwsc (package). See BUILDING.md for the toolchain and the SDK.
 
@@ -20,6 +25,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -171,6 +177,18 @@ def build_loader():
 
 # ---- app
 
+def build_date():
+    """SOURCE_DATE_EPOCH as __DATE__ writes it ("Oct  6 2026", the day space-padded), UTC; None if unset"""
+    sde = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if not sde:
+        return None
+    if not sde.isdigit():
+        raise SystemExit(f"SOURCE_DATE_EPOCH={sde!r}: seconds since 1970 expected")
+    t = time.gmtime(int(sde))
+    month = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()[t.tm_mon - 1]   # (not locale-dependent)
+    return f"{month} {t.tm_mday:2d} {t.tm_year}"
+
+
 def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_CDC", "FELUCCA_UART",
@@ -181,6 +199,9 @@ def build_app():
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
     if VERSION:
         flags.append(f'-DFELUCCA_VERSION="{VERSION}"')
+    date = build_date()
+    if date:
+        flags.append(f'-DFELUCCA_BUILD_DATE="{date}"')
     tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
            ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),

@@ -46,6 +46,16 @@ On Linux x86-64 the toolchain runs natively and Docker is not needed.
 ./build.sh
 ```
 
+`tools/get_toolchain.sh` installs the toolchain pinned by SHA-256
+(`jieli-linux-toolchains-20250805.1.tar.xz`, from JieLi's Aliyun bucket or pkgman): nothing is
+installed unless the download matches, an install that already matches is kept, and
+`JIELI_TOOLCHAIN_URL` + `JIELI_TOOLCHAIN_SHA256` select another one.
+
+**Reproducible builds.** The build date on the ABOUT page is the only time stamp in the image.
+`SOURCE_DATE_EPOCH=<seconds> ./build.sh` sets it, and then the same sources and toolchain give the
+same package byte for byte. CI uses the commit's time, builds twice and compares, and rebuilds the
+released 2.3 from its own sources to check it against `docs/firmware/sloop-2.3.fwsc`.
+
 `JIELI_TOOLCHAIN` and `AC79_SDK` override the default locations
 (`~/.jieli/toolchain`, `~/fw-AC79_AIoT_SDK`).
 

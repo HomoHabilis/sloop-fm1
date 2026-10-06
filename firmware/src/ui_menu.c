@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* SLOOP menu (HOME held): COLOR, LOWCUT, ZOOM, LIGHTS, KEYS, NOTES, USB AUDIO, HARDWARE CALIBRATION, ABOUT. */
+#ifndef FELUCCA_BUILD_DATE
+#define FELUCCA_BUILD_DATE __DATE__  /* tools/build.py: SOURCE_DATE_EPOCH pins it (reproducible builds) */
+#endif
 /* ------------------------------------------------------------ menu --- */
 enum { MI_COLOR, MI_LOWCUT, MI_ZOOM, MI_LIGHTS, MI_KEYS, MI_NOTES, MI_USB, MI_PANEL, MI_ABOUT, MI_BACK, MI_COUNT };
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "LOWCUT", "ZOOM", "LIGHTS", "KEYS", "NOTES", "USB AUDIO",
@@ -32,7 +35,7 @@ static void draw_menu(void)
             cv_rect(96, 22, 16, 4, TE_COL[2]), cv_rect(96, 28, 20, 4, TE_COL[3]);
             cv_text(4, 36, &FONT_S, "BASED ON FELUCCA", C_AMB);
             cv_text(4, 54, &FONT_S, FELUCCA_VERSION, C_HI);
-            cv_text(236 - text_w(&FONT_S, __DATE__), 54, &FONT_S, __DATE__, C_GRAY);   /* build date */
+            cv_text(236 - text_w(&FONT_S, FELUCCA_BUILD_DATE), 54, &FONT_S, FELUCCA_BUILD_DATE, C_GRAY);   /* build date */
             cv_text(cv_text(4, 72, &FONT_S, "LEO KUROSHITA", C_HI) + 8, 72, &FONT_S, "@KUROGEDELIC", C_AMB);
             cv_text(4, 88, &FONT_S, "H\xDCGELTON INSTRUMENTS", C_HI);   /* Latin-1 U-umlaut */
             cv_text(4, 104, &FONT_S, "HUGELTON.COM", C_AMB);
