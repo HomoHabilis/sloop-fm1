@@ -43,8 +43,12 @@ jobs:
   firmware:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      BASE_SHA: d691ba7b2d922f1a1f41a3622cffe29ce41c5506   # SLOOP 2.3 as released: the reference build
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -70,6 +74,13 @@ jobs:
         run: |
           export AC79_SDK="$HOME/ac79-sdk"
           sh build.sh
+      - name: Target cost of the released 2.3 sources, same toolchain (reference)
+        continue-on-error: true
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          git worktree add /tmp/base "$BASE_SHA"
+          (cd /tmp/base && sh build.sh > /tmp/base-build.log 2>&1 && \
+           python3 tests/target_budget.py build/felucca.dis tests/target_budget.txt) || tail -20 /tmp/base-build.log
       - name: Full test suite on the build
         env:
           SOAK_MIN: "3"
