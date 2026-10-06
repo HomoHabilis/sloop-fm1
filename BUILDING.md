@@ -98,10 +98,19 @@ The update path is guarded twice:
   the packager, the installers and the released package). A change fails the tests until it is
   reviewed, tested (ideally an install on a real FM-1 from the previous release) and recorded with
   `python3 tests/update_freeze.py --update`.
+- `tests/usb_sim_test.c` (built with `-DSIM_APP` and `-DSIM_LOADER`): the real USB driver
+  (`firmware/src/usb.c`) on a simulated USB device controller, against a simulated host that
+  enumerates the FM-1 and serves the package as the installers do. Whole update sessions run
+  through it in normal mode, in the USB rescue and in the update loader, with the computer's other
+  MIDI traffic mixed in (notes, a DAW's clock), the FM-1's MIDI out busy, the audio dead, a replug
+  in the middle (nothing committed, the next try succeeds), a request lost and the host not reading
+  for 3 s, a byte damaged on the way. `-DRECOVERY_SRC='"path"' -DNO_USB_GUARD` runs it against
+  another `recovery.c` without `usb_guard.c` (2.3's: its rescue fails under MIDI traffic).
 - `tests/pkg_test.py [NEW.fwsc]`: the released package taken apart with every CRC checked and built
   again byte for byte by `tools/fm1pkg_make.py`; single-bit damage refused; a new build's package has
   the released flash head, SPL, chip key and SDK parts, and its update loader is compared with 2.3's
-  (`STRICT_LOADER=1`: must be identical).
+  (`STRICT_LOADER=1`: must be identical). It also checks that the published installer page inlines the
+  tested `web/fm1ota.js` and `web/fm1pkg.js` line for line.
 
 The regression suite (`tests/regress.c`) renders every engine and preset and compares a
 hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU

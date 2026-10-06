@@ -94,6 +94,18 @@ def main():
     ok(bad == 0, f"damaged packages: {tried} single-bit flips in the checked parts, all refused")
     ok(refused(raw[:len(raw) // 2]), "a cut-off package is refused")
 
+    sys.path.insert(0, str(ROOT / "web"))
+    import make_site                       # noqa: E402  (how the published page inlines the modules)
+    page = (ROOT / "docs" / "webapp" / "installer" / "index.html").read_text(encoding="utf-8")
+    for mod in ("fm1ota.js", "fm1pkg.js"):
+        pos, missing = 0, 0
+        for ln in (x for x in make_site.strip_module((ROOT / "web" / mod).read_text(encoding="utf-8")).splitlines()
+                   if x.strip()):
+            i = page.find(ln, pos)
+            missing += i < 0
+            pos = i if i >= 0 else pos
+        ok(missing == 0, f"the published installer inlines the tested web/{mod}, line for line")
+
     new = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "build" / "felucca.fwsc"
     if new.exists() and new.resolve() != REL.resolve() and new.read_bytes() != raw:
         n = U.unpack(new.read_bytes())

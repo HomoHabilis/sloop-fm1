@@ -175,6 +175,7 @@ Nothing to download or compile. Your projects, user presets, samples and setting
 
 - **The FM-1 no longer starts SLOOP:** hold **OCT−** alone while switching it on (*SLOOP USB RESCUE*), then install again.
 - **An install was cut off:** the FM-1 stays in update mode; press INSTALL again and it finishes.
+- **Fixed after 2.3:** in USB RESCUE, MIDI notes or clock arriving from the computer (a DAW left open) could fill the FM-1's MIDI input and block the installer. The rescue now empties it, and the normal firmware empties it too if its audio ever stopped.
 - If an FM-1 no longer starts at all, recovery needs [FM-1-transporter](https://github.com/kurogedelic/FM-1-transporter).
 
 > Custom firmware is installed at your own risk. No warranty.
@@ -356,7 +357,7 @@ Something else? [Open an issue](../../issues): what you did, what you expected, 
 
 See [BUILDING.md](BUILDING.md). In short: the JieLi toolchain and three files of the AC79 SDK, then `./build.sh` (Linux / macOS) or `INSTALL-SLOOP.bat` (Windows with WSL), which builds the firmware and serves the installer and the editor on `http://localhost:8766`.
 
-No toolchain? `tests/run_host_tests.sh` runs the same host suite against the released package (every C test is still built from this tree), and GitHub Actions runs both on every push (`.github/workflows/ci.yml`). The update path is frozen: `tests/update_freeze.py` fails if any file of the loader, the update entry, the rescue, the packager or the installers changes without a deliberate review.
+No toolchain? `tests/run_host_tests.sh` runs the same host suite against the released package (every C test is still built from this tree), and GitHub Actions runs both on every push (`.github/workflows/ci.yml`). The update path is frozen: `tests/update_freeze.py` fails if any file of the loader, the update entry, the rescue, the packager or the installers changes without a deliberate review. `tests/usb_sim_test.c` runs whole updates through the real USB driver on a simulated controller (normal mode, USB rescue, update loader), with other MIDI traffic, replugs and a dead audio path.
 
 `tests/run_tests.sh` runs the host test suite with no hardware: audio renders against golden hashes, CPU budgets, the sequencer's timing (no drift, swing, ratchets, rolls, the REC modes and the count-in, MIDI clock), the UI pages and layers, the knobs, flash storage, the update loader, MIDI and USB audio, and the web pages (editor, backup, CHOP, installer).
 

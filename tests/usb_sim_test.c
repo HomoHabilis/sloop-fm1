@@ -306,6 +306,8 @@ static uint32_t interleaved, sysex_in, notes_in, requests, identities, success_a
 static char identity[32];
 static uint32_t serve_corrupt_at = 0xFFFFFFFFu;          /* a damaged byte served once at this address */
 static uint32_t reset_after_requests = 0xFFFFFFFFu;      /* a bus reset (replug) after n requests */
+static uint32_t stall_at_request = 0xFFFFFFFFu;          /* the host stops reading at request n .. */
+static uint64_t stall_until;                             /* .. until then (us) */
 
 static void hq_put(uint32_t ev) { if (hq_w - hq_r < sizeof hq / sizeof hq[0]) hq[hq_w++ % (sizeof hq / sizeof hq[0])] = ev; }
 static void host_send_sysex(const uint8_t *m, uint32_t n)   /* F0..F7 -> CIN 4 / 5 / 6 / 7 events */
@@ -368,6 +370,11 @@ static void host_message(const uint8_t *m, uint32_t n)  /* a complete F0..F7 fro
         for (i = 6; i < 14; i++) s += u[i];
         if ((uint8_t)~s != u[14]) return;
         requests++;
+        if (requests == stall_at_request) {             /* unanswered, and the host stops reading */
+            host_reads = 0;
+            stall_until = t_us + 3000000ull;
+            return;
+        }
         if (requests == reset_after_requests) {         /* replugged: the host side starts again */
             sie.rxcsr1[1] = sie.txcsr1[1] = 0;
             sie.intrusb |= 4u;
@@ -438,6 +445,10 @@ static void tick(void)
     if (!recovery_active)
 #endif
         fm1_ms = (uint32_t)(t_us / 1000u);
+    if (stall_until && t_us >= stall_until) {
+        stall_until = 0;
+        host_reads = 1;
+    }
     if (t_us % 1000u == 0) {
         sie.frame = (uint16_t)((sie.frame + 1u) & 0x7FFu);
         host_take_in();
@@ -734,15 +745,11 @@ int main(int argc, char **argv)
 
     reset_world(0);
     enumerate(0x0001, 1);
+    stall_at_request = 6;                                /* mid-session: a request lost, then 3 s not read */
     upgrade_key();
-    host_reads = 0;                                      /* the host stops reading for 3 s, then reads again */
-    {
-        uint64_t end = t_us + 3000000ull;
-        while (t_us < end) { dev_poll(); ota_service(); if (usb.ota_req) break; }
-    }
-    host_reads = 1;
-    if (usb.ota_req) { usb.ota_req = 0; ota_session(); }
-    check(committed && staged_ok(), "app: the host not reading for 3 s: the device retries, the session completes");
+    check(app_session(60000) && staged_ok() && host_reads,
+          "app: mid-session, a request lost and the host not reading for 3 s: retried, the session completes");
+    stall_at_request = 0xFFFFFFFFu;
 
     /* the USB rescue: no TIMER5, no audio; the host keeps sending notes and clock (a DAW) */
     reset_world(1);
