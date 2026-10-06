@@ -78,6 +78,15 @@ jobs:
           sh tests/run_tests.sh
       - name: Package against the released 2.3 (layout, SDK parts, loader compared)
         run: python3 tests/pkg_test.py build/felucca.fwsc
+      - name: Disassembly and test outputs (also when a step failed)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sloop-build-diag-${{ github.sha }}
+          path: |
+            build/felucca.dis
+            build/loader/loader.dis
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: sloop-fwsc-${{ github.sha }}

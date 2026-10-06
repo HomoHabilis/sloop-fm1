@@ -17,6 +17,11 @@ static void recovery_poll(void)
     if (now - recovery_usb_last >= 500u * FM1_TICKS_PER_US) {
         recovery_usb_last = now;
         usb_poll();
+        mi_r = mi_w;                         /* no audio here to empty the MIDI in ring: a full one holds
+                                              * back every USB packet (usb.c ep1_take), the installer's
+                                              * SysEx too, so notes or a DAW's clock could block the
+                                              * rescue, also during its update session (ota_idle).
+                                              * Same thread as usb_poll (no TIMER5 here): no race */
     }
 }
 

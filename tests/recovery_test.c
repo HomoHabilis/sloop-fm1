@@ -11,6 +11,7 @@ static uint32_t ticks, fm1_ms, polls, feeds, retries, services, sessions, rom, d
 static uint32_t jedec = 0x856014u, jedec_reads, lcd_calls, font;
 static uint8_t recovery_active, flash_ok;
 static struct { uint8_t ota_req, uboot_req; } usb;
+static uint32_t mi_w, mi_r;              /* usb.c's MIDI in ring indices (recovery empties it) */
 static struct { uint32_t buttons; } fm1_in;
 static uint32_t input_buttons, stop_at_retry;
 static jmp_buf exit_loop;
@@ -21,7 +22,7 @@ static jmp_buf exit_loop;
 #define FONT_S font
 static uint32_t fm1_ticks(void) { return ticks; }
 static void fm1_wdt_feed(void) { feeds++; }
-static void usb_poll(void) { polls++; }
+static void usb_poll(void) { polls++; mi_w += 3; }   /* (the host sends notes / clock meanwhile) */
 static void usb_retry(uint32_t t)
 {
     (void)t; retries++;
@@ -78,11 +79,13 @@ int main(void)
     ticks += 12000u; recovery_poll();
     assert(fm1_ms == 1 && polls == 2);
     recovery_poll(); assert(polls == 2);     /* never busy-poll USB faster than 2 kHz */
+    assert(mi_r == mi_w);                    /* the MIDI in ring emptied with every poll (no audio here) */
 
     flash_ok = 0; usb.ota_req = 1; recovery_step();
     assert(sessions == 0 && usb.ota_req == 0);
     flash_ok = 1; usb.ota_req = 1; recovery_step();
     assert(sessions == 1 && fm1_ms == 101 && polls == 202);
+    assert(mi_r == mi_w);                    /* ... during the update session too */
     usb.ota_req = 1; recovery_step();
     assert(sessions == 2 && fm1_ms == 201 && polls == 402);
     assert(feeds > 400 && services == 3);

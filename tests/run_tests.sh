@@ -78,6 +78,12 @@ run "USB audio input: descriptors (without CDC), ring and packets" "$OUT/uac_tes
 uac_in_app() { ${CC%% *} -E -Ibuild/gen -Ifirmware/hal -Ifirmware/src firmware/src/felucca.c 2>/dev/null | grep -q uac_service; }
 run "USB audio input: built into the firmware (FELUCCA_UAC set before usb.c)" uac_in_app
 
+$CC -Wno-unused-variable -DSIM_APP -o "$OUT/usb_sim_app" tests/usb_sim_test.c
+run "update over the real USB driver (app, rescue): enumeration, sessions with MIDI traffic, replug, dead audio" \
+    "$OUT/usb_sim_app" build/felucca.fwsc
+$CC -Wno-unused-variable -DSIM_LOADER -o "$OUT/usb_sim_loader" tests/usb_sim_test.c
+run "update over the real USB driver (loader): enumeration, the whole write with MIDI traffic and a damaged byte" \
+    "$OUT/usb_sim_loader" build/felucca.fwsc
 $CC -o "$OUT/ota_test" tests/ota_test.c
 run "M-UPGRADE entry" "$OUT/ota_test" build/felucca.fwsc
 

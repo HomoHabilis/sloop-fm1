@@ -8,7 +8,7 @@ reviewed on purpose.
 
 The files: the update loader and everything it is built from (firmware/loader, usb.c, ota.c,
 libc.c and their hal/ headers), the app's update entry and USB rescue (ota.c, recovery.c,
-bootguard.h), the boot path (crt0.S, app.ld), what keeps the user's data across an update
+bootguard.h), the guard that keeps USB packets flowing (usb_guard.c), the boot path (crt0.S, app.ld), what keeps the user's data across an update
 (storage.c), the package builder (fm1pkg_make.py, lz4blk.py, build.py), the installers (the
 web installer and its modules, fm1_install.py) and the released package the tests replay
 (docs/firmware/sloop-2.3.fwsc).
@@ -30,7 +30,7 @@ FILES = [
     "firmware/loader/loader.c", "firmware/loader/ldr_core.c", "firmware/loader/loader.ld",
     "firmware/loader/crt0_ldr.S",
     "firmware/src/usb.c", "firmware/src/ota.c", "firmware/src/libc.c", "firmware/src/recovery.c",
-    "firmware/src/bootguard.h", "firmware/src/storage.c",
+    "firmware/src/bootguard.h", "firmware/src/storage.c", "firmware/src/usb_guard.c",
     "firmware/hal/fm1_flash.h", "firmware/hal/fm1_sys.h", "firmware/hal/fm1_time.h", "firmware/hal/fm1_usb.h",
     "firmware/hal/fm1_cc.h", "firmware/hal/fm1_xip.h",
     "firmware/crt0.S", "firmware/app.ld",

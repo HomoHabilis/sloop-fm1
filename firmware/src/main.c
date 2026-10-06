@@ -251,6 +251,7 @@ static void fm1_main(void)
         cdc_task();
 #endif
         mout_alive_ms = fm1_ms | 1u;                    /* MIDI OUT: the main loop runs (midi_out.c mo_held) */
+        usb_in_guard(fm1_ms);                           /* the update stays possible (usb_guard.c) */
         felucca_dbg.ui_frames++;
         felucca_dbg.page = ui.page;
         felucca_dbg.home = ui.home;

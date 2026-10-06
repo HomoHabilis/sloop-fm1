@@ -87,6 +87,7 @@ static uint32_t mo_clk_u;        /* units into the current clock pulse */
 static volatile uint32_t mout_alive_ms;   /* the main loop's heartbeat (main.c); 0 = not running yet */
 static uint8_t mo_alive_seen;
 static uint32_t mo_sent, mo_dropped;      /* diagnostics: packets queued, note-ons dropped (full) */
+static uint8_t mo_pend;          /* something may be sounding or waiting: mout_block has work */
 
 static uint32_t mo_free(void) { return MO_N - (mo_qw - mo_qr); }
 static int mo_push(uint32_t pkt)
@@ -115,7 +116,7 @@ static int mo_send_off(uint32_t i, uint32_t note)
 {
     return mo_push(0x08u | (0x80u | mo_t[i].ch) << 8 | (note & 127u) << 16 | 64u << 24);
 }
-static void mo_retry_offs(uint32_t i)
+static __attribute__((noinline)) void mo_retry_offs(uint32_t i)
 {
     uint32_t w, b;
     for (w = 0; w < 4u; w++)
@@ -136,7 +137,7 @@ static void mo_off(uint32_t i, uint32_t note)   /* note's note-off, now or as so
 }
 
 /* trk_note_on (voice.c), after MUTE / SOLO: 1 = MIDI only, the engine plays nothing */
-static int mout_note_on(track_t *t, uint32_t note, uint32_t vel)
+static __attribute__((noinline)) int mout_note_on(track_t *t, uint32_t note, uint32_t vel)
 {
     uint32_t i = mo_ix(t), k, free = MO_NDG, oldest = 0;
     if (mout_mode[i] == MO_INT)
@@ -155,6 +156,7 @@ static int mout_note_on(track_t *t, uint32_t note, uint32_t vel)
     if (!mo_push(0x09u | (0x90u | mo_t[i].ch) << 8 | note << 16 | (vel < 1u ? 1u : vel > 127u ? 127u : vel) << 24))
         return mout_mode[i] == MO_EXT;
     mo_set(mo_t[i].on, note);
+    mo_pend = 1;
     if (i == TRK_DRUM) {                         /* a drum hit: its note-off MO_DGATE later */
         for (k = 0; k < MO_NDG; k++) {
             if (mo_dg[k].left && mo_dg[k].note == note)
@@ -177,14 +179,14 @@ static int mout_note_on(track_t *t, uint32_t note, uint32_t vel)
     return mout_mode[i] == MO_EXT;
 }
 
-static void mout_note_off(track_t *t, uint32_t note)
+static __attribute__((noinline)) void mout_note_off(track_t *t, uint32_t note)
 {
     uint32_t i = mo_ix(t);
     if (i != TRK_DRUM)                           /* (the drums: their gate ends them) */
         mo_off(i, note & 127u);
 }
 
-static void mo_slot_off(uint32_t i)              /* every note of slot i */
+static __attribute__((noinline)) void mo_slot_off(uint32_t i)              /* every note of slot i */
 {
     uint32_t w;
     for (w = 0; w < 4u; w++) {
@@ -193,7 +195,7 @@ static void mo_slot_off(uint32_t i)              /* every note of slot i */
     }
     mo_retry_offs(i);
 }
-static void mout_track_off(track_t *t)           /* every note the track has sounding outside */
+static __attribute__((noinline)) void mout_track_off(track_t *t)           /* every note the track has sounding outside */
 {
     uint32_t i = mo_ix(t), w;
     mo_slot_off(i);
@@ -205,7 +207,7 @@ static void mout_track_off(track_t *t)           /* every note the track has sou
 /* the keys of a track on OUT INT echo what they play on its channel (seq.c key_down / key_up, as 2.3);
  * kept like the tracks' notes, so a full queue cannot lose the note-off of an echoed note-on.
  * Returns 1 if the note-on went out (then key_up sends its note-off) */
-static int mout_echo_on(uint32_t i, uint32_t ch, uint32_t note, uint32_t vel)
+static __attribute__((noinline)) int mout_echo_on(uint32_t i, uint32_t ch, uint32_t note, uint32_t vel)
 {
     uint32_t e = MO_ECHO + i % NTRK;
     note &= 127u;
@@ -219,9 +221,10 @@ static int mout_echo_on(uint32_t i, uint32_t ch, uint32_t note, uint32_t vel)
     if (!mo_push(0x09u | (0x90u | mo_t[e].ch) << 8 | note << 16 | (vel < 1u ? 1u : vel > 127u ? 127u : vel) << 24))
         return 0;
     mo_set(mo_t[e].on, note);
+    mo_pend = 1;
     return 1;
 }
-static void mout_echo_off(uint32_t i, uint32_t note)
+static __attribute__((noinline)) void mout_echo_off(uint32_t i, uint32_t note)
 {
     mo_off(MO_ECHO + i % NTRK, note & 127u);
 }
@@ -237,14 +240,17 @@ static void mo_forget(void)                      /* USB gone: nothing to release
         mo_dg[i].left = 0;
     mo_qr = mo_qw;
     mo_playing = 0;
+    mo_pend = 0;
 }
 
 /* once a block, before its events: the settings, the drum gates, what must be released */
-static void mout_block(uint32_t n)
+static __attribute__((noinline)) void mout_block(uint32_t n)
 {
-    uint32_t i;
+    uint32_t i, busy = 0;
     if (mout_alive_ms)
         mo_alive_seen = 1;
+    if (!mo_pend && !(mout_mode[0] | mout_mode[1] | mout_mode[2] | mout_mode[3]))
+        return;                                  /* every track INT, nothing sounding outside: no work */
     if (!usb.config) {
         mo_forget();
         return;
@@ -263,6 +269,8 @@ static void mout_block(uint32_t n)
             mo_slot_off(MO_ECHO + i);            /* (the echo: released on a stall, not on MUTE, as 2.3) */
         else if (mo_any(mo_t[MO_ECHO + i].offp))
             mo_retry_offs(MO_ECHO + i);
+        busy |= (uint32_t)(mo_any(mo_t[i].on) | mo_any(mo_t[i].offp) | mo_any(mo_t[MO_ECHO + i].on) |
+                           mo_any(mo_t[MO_ECHO + i].offp));
     }
     for (i = 0; i < MO_NDG; i++)
         if (mo_dg[i].left) {
@@ -272,12 +280,14 @@ static void mout_block(uint32_t n)
                 mo_dg[i].left = 0;
                 mo_off(TRK_DRUM, mo_dg[i].note);
             }
+            busy = 1;
         }
+    mo_pend = (uint8_t)(busy != 0);
 }
 
 /* once a block, after its events: the clock (adv: the units the transport moves in this block) */
 #define MO_PULSE_U (BEAT_U / 24u)
-static void mout_clock(uint32_t adv, uint32_t n)
+static __attribute__((noinline)) void mout_clock(uint32_t adv, uint32_t n)
 {
     uint32_t k = 0;
     if (!mout_clk || song.g[G_SYNC] == 1 || !usb.config || mo_held()) {   /* (SYNC USB: back to the master) */
@@ -302,8 +312,10 @@ static void mout_clock(uint32_t adv, uint32_t n)
         mo_clk_u %= MO_PULSE_U;                  /* (a tempo jump: no burst of pulses) */
 }
 
-static void mout_flush(void)                     /* into usb.c's ring, as far as it has room */
+static __attribute__((noinline)) void mout_flush(void)                     /* into usb.c's ring, as far as it has room */
 {
+    if (mo_qr == mo_qw)
+        return;
     while (mo_qr != mo_qw && usb.config && mo_w - mo_r < MQ) {
         midi_out_event(mo_q[mo_qr % MO_N]);
         mo_qr++;
