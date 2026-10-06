@@ -732,6 +732,22 @@ int main(int argc, char **argv)
     upgrade_key();
     check(app_session(60000) && staged_ok(), "app: the audio dead, MIDI in ring full: the update still gets through (usb_guard.c)");
 
+    {   /* the guard does not fire on a clock jump (an IRQ-off flash erase) while the audio is alive */
+        uint32_t d0 = usb_guard_drops;
+        mi_r = 0; mi_w = MQ - 4u;                        /* too full for a packet */
+        usb_in_guard(1000);                              /* (all fine until now) */
+        usb_in_guard(1400);                              /* first look after a 400 ms erase: stuck */
+        mi_r = mi_w;                                     /* the audio runs, empties it */
+        usb_in_guard(1415);
+        mi_w += MQ - 4u;
+        usb_in_guard(1430);
+        usb_in_guard(1460);                              /* stuck for 30 ms only */
+        check(usb_guard_drops == d0, "app: usb_guard leaves the ring alone after a clock jump (flash erase), audio alive");
+        usb_in_guard(1490);                              /* stuck for 60 ms: the audio is dead */
+        check(usb_guard_drops == d0 + 1 && mi_r == mi_w, "app: usb_guard empties a ring stuck for > 50 ms");
+        mi_r = mi_w = 0;
+    }
+
     reset_world(0);
     enumerate(0x0001, 1);
     reset_after_requests = 4;                            /* replugged in the middle */
