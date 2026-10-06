@@ -361,11 +361,14 @@ static void mono_remove(track_t *t, uint32_t note)
     t->nmono = (uint8_t)k;
 }
 
-static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
+/* MIDI OUT (midi_out.c): what a track plays also goes out, or only goes out (OUT = MIDI) */
+static int mout_note_on(track_t *t, uint32_t note, uint32_t vel);
+static void mout_note_off(track_t *t, uint32_t note);
+static void mout_track_off(track_t *t);
+
+static void eng_note_on(track_t *t, uint32_t note, uint32_t vel)   /* the track's own engine */
 {
     uint32_t any = 0, i, mode = (uint32_t)t->p[P_VOICE];
-    if (trk_silent(t))
-        return;                                         /* MUTE, or another track soloed */
     if (is_drum(t)) {                                   /* the drum track: GM drums (drums.c) */
         drum_on(note, vel);
         return;
@@ -410,9 +413,19 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
     }
 }
 
+static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
+{
+    if (trk_silent(t))
+        return;                                         /* MUTE, or another track soloed */
+    if (mout_note_on(t, note, vel))
+        return;                                         /* MIDI OUT = MIDI: the engine stays silent */
+    eng_note_on(t, note, vel);
+}
+
 static void trk_note_off(track_t *t, uint32_t note)
 {
     uint32_t i, k = 0, mode = (uint32_t)t->p[P_VOICE];
+    mout_note_off(t, note);
     if (is_drum(t))
         return;                                         /* one-shots */
     for (i = 0; i < t->xp_n; i++)                       /* not sounding yet (engine switch): forget it */
@@ -450,6 +463,7 @@ static void trk_note_off(track_t *t, uint32_t note)
 static void trk_all_off(track_t *t)
 {
     uint32_t i;
+    mout_track_off(t);
     for (i = 0; i < NVOICE; i++) {
         t->v[i].gate = 0;
         t->v[i].stage = t->v[i].active ? 3 : 0;
@@ -494,8 +508,9 @@ static void engine_block(track_t *t)
         {
             uint32_t n = t->xp_n;
             t->xp_n = 0;
-            for (i = 0; i < n; i++)
-                trk_note_on(t, t->xp_note[i], t->xp_vel[i]);
+            for (i = 0; i < n; i++)                     /* (sent to MIDI OUT when they came) */
+                if (!trk_silent(t))
+                    eng_note_on(t, t->xp_note[i], t->xp_vel[i]);
         }
     }
     for (i = 0; i < 8u; i++)                            /* the engine's own values, for a later fade */

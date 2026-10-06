@@ -131,6 +131,7 @@ Save up to four sections **A–D** (SAVE + keys 5–8), play them live on the ne
 ### MIDI
 
 - **USB MIDI** in and out, class compliant.
+- **MIDI OUT to external synths** (in development): each track plays its own engine, an external instrument over MIDI, or both, on its own channel; MIDI clock out. [Details](#midi-out-play-external-synths-in-development).
 - **TRS MIDI IN** (the 3.5 mm jack, 2.3) for a keyboard or a pad controller.
 - **MIDI clock in** (USB or TRS): tempo, START, CONTINUE, STOP.
 - Details: [MIDI and USB audio](#midi-and-usb-audio).
@@ -243,6 +244,27 @@ SLOOP takes MIDI from two places at once:
 
 A USB keyboard plugged **straight into the FM-1** cannot work: both are USB devices, and a USB link needs a host (a computer, a phone, or a USB MIDI host box). Bluetooth MIDI is not supported: SLOOP, like Felucca, never switches the radio on.
 
+### MIDI out: play external synths (in development)
+
+Every track can play an external instrument — a MiniFreak, a Roland P-6, a sampler, a drum machine, a DAW — from SLOOP's sequencer. **GLO → MIDI OUT** (the fifth GLO page) sets the **selected track**:
+
+| Knob | Setting | |
+| --- | --- | --- |
+| KNOB 1 | **OUT** | **INT** the FM-1's own sound (the default, as before) · **MIDI** MIDI only, the FM-1 stays silent on that track · **BOTH** the FM-1 and MIDI |
+| KNOB 2 | **CH** | the channel it plays on: 1–16 (default 1, 2, 3, and 10 for the drums) |
+| KNOB 3 | **CLK** | MIDI clock out: 24 pulses a beat while stopped too, START on PLAY, STOP on STOP (for every track) |
+
+- **Everything the track plays goes out:** the steps (ties, slides, chords, ratchets), the arpeggiator, note repeat, your keys, song sections, and a keyboard on the MIDI IN jack.
+- **No note left hanging:** every note sent keeps its note-off. STOP, MUTE, SOLO, a change of OUT or CH, a preset change and an update all release what is sounding outside. The drum track sends each hit with its note-off 100 ms later (drum machines, samplers).
+- A note coming *in* over USB is not sent back out over USB (a DAW with MIDI thru would loop); a note from the MIDI IN jack is. With **SYNC = USB**, no clock goes back to the computer.
+- MIDI OUT is a setting of the FM-1, kept with the menu settings and the backup, not with a project.
+
+**How the MIDI reaches the synth.** The FM-1 has no MIDI output jack (its 3.5 mm jack is an input) and Bluetooth MIDI stays off, so MIDI leaves over **USB**:
+
+- **A computer or a phone** routes the *Felucca* MIDI port to the synth (a DAW, MIDI routing software, a USB-to-DIN MIDI interface).
+- **Without a computer:** a **USB MIDI host box** connects two USB devices — the FM-1 and a synth with a class-compliant USB MIDI port (MiniFreak, P-6), or a DIN MIDI input through the box's DIN output. USB MIDI host boxes with DIN ports exist from several makers.
+- Set the synth to receive on the channel of its track (e.g. MiniFreak on channel 1 for track 1, P-6 on 2 for track 2), and to follow the clock if you use CLK.
+
 ### MIDI clock in
 
 GLO → SYSTEM → **SYNC** = **USB** or **TRS** (INT: SLOOP's own tempo). START plays from the top, CONTINUE carries on, STOP stops; the tempo follows the master and the steps follow its 24 pulses a beat, so SLOOP never drifts. When the clock stops for half a second, PLAY on the FM-1 plays at its own tempo again.
@@ -280,6 +302,7 @@ The protocol is documented in [web/EDITOR_PROTOCOL.md](web/EDITOR_PROTOCOL.md).
 | Cable | a USB **data** cable, plugged directly (no hub) |
 | USB audio | any computer that takes a class-compliant USB audio input (no driver) |
 | MIDI IN jack | 3.5 mm TRS, through a TRS-to-DIN MIDI adapter (type A or B) |
+| MIDI out to a synth | over USB, through a computer, a phone or a USB MIDI host box (the FM-1 has no MIDI output jack) |
 | Not supported | Bluetooth MIDI; a USB keyboard plugged straight into the FM-1 |
 
 ## Troubleshooting
@@ -317,7 +340,7 @@ Something else? [Open an issue](../../issues): what you did, what you expected, 
 | Effects | 16 punch-in effects; master DUST, DUCK, DJ filter, limiter; per track drive, slicer, sends to a stereo chorus, a tempo delay and a stereo reverb |
 | Memory | autosave, undo / redo, 4 projects, 32 user presets, song of 4 sections × 16 steps × 1–64 bars, full backup / restore (editor) |
 | Audio | 44.1 kHz, fixed-point DSP; USB audio input (the master output, 16-bit stereo, class compliant) |
-| MIDI | USB class-compliant in / out; TRS MIDI IN (3.5 mm); MIDI clock in (USB or TRS) |
+| MIDI | USB class-compliant in / out; TRS MIDI IN (3.5 mm); MIDI clock in (USB or TRS); per-track MIDI out to external gear (INT / MIDI / BOTH, channel 1–16) and MIDI clock out, over USB |
 | Lights | button backlight (3 levels), C keys / white keys, played notes |
 | Update | over USB from the browser (SHA-256 and CRC checked), USB rescue, return to the official V15 |
 
@@ -332,6 +355,8 @@ Something else? [Open an issue](../../issues): what you did, what you expected, 
 ## Building and tests
 
 See [BUILDING.md](BUILDING.md). In short: the JieLi toolchain and three files of the AC79 SDK, then `./build.sh` (Linux / macOS) or `INSTALL-SLOOP.bat` (Windows with WSL), which builds the firmware and serves the installer and the editor on `http://localhost:8766`.
+
+No toolchain? `tests/run_host_tests.sh` runs the same host suite against the released package (every C test is still built from this tree), and GitHub Actions runs both on every push (`.github/workflows/ci.yml`). The update path is frozen: `tests/update_freeze.py` fails if any file of the loader, the update entry, the rescue, the packager or the installers changes without a deliberate review.
 
 `tests/run_tests.sh` runs the host test suite with no hardware: audio renders against golden hashes, CPU budgets, the sequencer's timing (no drift, swing, ratchets, rolls, the REC modes and the count-in, MIDI clock), the UI pages and layers, the knobs, flash storage, the update loader, MIDI and USB audio, and the web pages (editor, backup, CHOP, installer).
 

@@ -62,6 +62,9 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`):
 | `FELUCCA_UAC` | 1 | USB audio input: the master output, 44.1 kHz stereo (after Felucca 1.0) |
 | `FELUCCA_UART` | 1 | TRS MIDI IN (the 3.5 mm jack) |
 
+MIDI OUT (`firmware/src/midi_out.c`) is always built: it only sends while a track is set to MIDI or
+BOTH, or CLK is on.
+
 ## Samples
 
 The CC0 instrument samples that the SAMPLE engine uses are in `assets/samples-cc0/`
@@ -79,6 +82,26 @@ Runs the host tests (flash storage, user presets, MIDI parser, update entry, upd
 loader, a DSP render, the 4-track mix, project formats, the SLICER, the regression suite,
 the command-line installer) and, with Node.js, the web page tests. Run it after `./build.sh`
 (it uses `build/` and needs `AC79_SDK` set as for the build).
+
+Without the JieLi toolchain (or the SDK checkout), `tests/run_host_tests.sh [PKG.fwsc]` runs the
+same suite: it generates `build/gen` (Python only), lets the released `docs/firmware/sloop-2.3.fwsc`
+stand in for the target build, takes the three SDK files out of it (`tools/fwsc_unpack.py`, checked
+against the SHA-256s above) and first runs clang's front end over the firmware with each build option.
+Every C test is built from the sources of the tree; only the cross-compile and its cost need the
+toolchain. GitHub Actions (`.github/workflows/ci.yml`) runs it on every push, and a second job
+cross-compiles with the JieLi toolchain, runs `tests/run_tests.sh` on the build and keeps the package.
+
+The update path is guarded twice:
+
+- `tests/update_freeze.py`: the SHA-256 of every file the update path is built from (the update
+  loader and what it includes, the update entry `ota.c`, the USB rescue, the boot path, `storage.c`,
+  the packager, the installers and the released package). A change fails the tests until it is
+  reviewed, tested (ideally an install on a real FM-1 from the previous release) and recorded with
+  `python3 tests/update_freeze.py --update`.
+- `tests/pkg_test.py [NEW.fwsc]`: the released package taken apart with every CRC checked and built
+  again byte for byte by `tools/fm1pkg_make.py`; single-bit damage refused; a new build's package has
+  the released flash head, SPL, chip key and SDK parts, and its update loader is compared with 2.3's
+  (`STRICT_LOADER=1`: must be identical).
 
 The regression suite (`tests/regress.c`) renders every engine and preset and compares a
 hash of each render with `tests/golden.txt`; it also checks levels, voices and the CPU

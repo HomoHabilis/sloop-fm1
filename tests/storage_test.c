@@ -70,6 +70,11 @@ int main(void)
     bad += check("other objects untouched", st_load(OBJ_PROJECT0 + 1, got, sizeof got) < 0);
     bad += check("settings save/load",
                  st_save(OBJ_SETTINGS, "hello", 5) == 0 && st_load(OBJ_SETTINGS, got, 5) == 5 && !memcmp(got, "hello", 5));
+    bad += check("a longer object, read by an older firmware: cut at its size (2.4 settings in 2.3)",
+                 st_save(OBJ_SETTINGS, "hello, 2.4", 10) == 0 && st_load(OBJ_SETTINGS, got, 6) == 6 &&
+                 !memcmp(got, "hello,", 6));
+    bad += check("a shorter object, read by a newer firmware: its own size (2.3 settings in 2.4)",
+                 st_save(OBJ_SETTINGS, "hello", 5) == 0 && st_load(OBJ_SETTINGS, got, 10) == 5);
     bad += check("CRC-32 is zlib's (check value 0xCBF43926)", st_crc32("123456789", 9) == 0xCBF43926u);
     memset(nor, 0xFF, sizeof nor);
     st_save(OBJ_PROJECT0 + 2, a, sizeof a);

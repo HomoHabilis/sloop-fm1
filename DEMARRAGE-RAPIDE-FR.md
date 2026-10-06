@@ -158,6 +158,7 @@ Chrome ou Edge, FM-1 en USB, **Connect**. Il suit l'appareil en direct.
 - **USB** : depuis un ordinateur ou un téléphone (DAW, appli de routage MIDI) ou un boîtier « USB MIDI host ». Un clavier USB branché directement sur le FM-1 ne peut pas marcher : ce sont deux appareils USB, il faut un hôte.
 - **Canaux :** 1, 2, 3 = pistes synth 1, 2, 3 · 10 = la batterie · 4 à 16 = **la piste sélectionnée** (règle ton clavier sur le canal 4 et il suit ALGORITHM).
 - **Horloge MIDI :** GLO → SYSTEM → **SYNC** = **USB** ou **TRS**. SLOOP suit le tempo, START, CONTINUE et STOP du maître, sans jamais dériver. Sans horloge pendant une demi-seconde, PLAY rejoue au tempo du FM-1. SYNC est un réglage de la FM-1 : il reste quand tu charges un projet.
+- **MIDI OUT (synthés externes) :** GLO → **MIDI OUT** règle la piste sélectionnée : **KNOB 1 OUT** = *INT* (le son de la FM-1), *MIDI* (MIDI seulement, la FM-1 se tait sur cette piste) ou *BOTH* ; **KNOB 2 CH** = le canal (1–16) ; **KNOB 3 CLK** = horloge MIDI en sortie. Tout ce que joue la piste sort (pas, ARP, touches, sections), chaque note avec sa note-off (STOP, MUTE, changement de canal : rien ne reste coincé). La FM-1 n'a pas de prise MIDI OUT : le MIDI sort en **USB**, vers un ordinateur ou un boîtier « USB MIDI host » relié au synthé (MiniFreak, P-6…).
 - Le MIDI Bluetooth n'est pas pris en charge (la radio reste éteinte).
 
 ## Lumières (jouer dans le noir)

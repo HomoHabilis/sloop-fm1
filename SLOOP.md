@@ -362,6 +362,14 @@ SLOOP takes MIDI from two places at once:
 
 Bluetooth MIDI is not supported: SLOOP, like Felucca, never switches the radio on.
 
+## MIDI out: external synths
+
+GLO → **MIDI OUT** (the fifth GLO page) sets the **selected track** (the track number shows in the footer): **KNOB 1 OUT** — *INT* the FM-1's sound (default), *MIDI* MIDI only (the FM-1 is silent on that track), *BOTH*; **KNOB 2 CH** — 1–16 (default 1, 2, 3 and 10 for the drums); **KNOB 3 CLK** — MIDI clock out for the whole FM-1 (24 pulses a beat, also while stopped so a follower keeps the tempo; START on PLAY, STOP on STOP; none while SYNC = USB).
+
+What the track plays goes out, whatever started it: steps with their ties, slides, chords and ratchets, the ARP, note repeat, the keys, song sections, a keyboard on the MIDI IN jack. Each note-on keeps its note-off: STOP, MUTE, SOLO, changing OUT or CH, changing the preset, an update starting (the FM-1 restarts at its end) all send the note-offs of what sounds outside; the drum track sends each hit's note-off 100 ms after it. A note that came in over USB is not echoed back to USB (no MIDI loop with a DAW's thru). On OUT INT the keys echo on the track's channel, as before.
+
+The FM-1 has no MIDI output jack and Bluetooth stays off: the MIDI goes out over **USB**, to a computer or phone (which routes it to the synth), or to a **USB MIDI host box** that links the FM-1 to a synth's USB MIDI port (MiniFreak, P-6) or to its DIN MIDI input. MIDI OUT is a setting of the FM-1 (kept with the settings and in the backup; an earlier SLOOP ignores it).
+
 ## USB audio: record on a computer
 
 On USB the FM-1 is also an audio input, named **Felucca**: 44.1 kHz, 16-bit stereo, class compliant, so no driver is needed. In your DAW or in Audacity, choose that input and record: you get the master output, exactly what the headphones play (after DUST, DUCK and FILT; the click and the count-in too, if they are on).
@@ -399,7 +407,7 @@ The glow is a short pulse on every scan of the panel (about 900 times a second):
 | Recording | live, quantised as heard (latency-compensated), overdub; records at once while playing; free take sets loop length and tempo, or the tempo set, from the first note or a one-bar count-in |
 | Memory | undo / redo, 4 projects, 32 user presets, autosave of the working project, song of 4 sections × 16 steps × 1–64 bars |
 | Audio | 44.1 kHz, fixed-point DSP; USB audio input (the master output, 16-bit stereo, class compliant) |
-| MIDI | USB class-compliant in / out; TRS MIDI IN (3.5 mm jack); channels 1–3 the synths, 10 the drums, 4–16 the selected track; MIDI clock in (USB or TRS) |
+| MIDI | USB class-compliant in / out; TRS MIDI IN (3.5 mm jack); channels 1–3 the synths, 10 the drums, 4–16 the selected track; MIDI clock in (USB or TRS); MIDI out per track to external gear (INT / MIDI / BOTH, channel 1–16) and clock out, over USB |
 | Update | over USB from the browser (package SHA-256 and CRC checked) |
 
 ## Rescue, going back, credits

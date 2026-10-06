@@ -48,6 +48,7 @@
 #if FELUCCA_UART
 #include "midi_uart.c"
 #endif
+#include "midi_out.c"         /* MIDI OUT: the tracks play external gear over USB */
 #define FELUCCA_ARRANGER 1
 #include "arranger.c"
 #include "seq.c"

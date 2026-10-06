@@ -81,6 +81,14 @@ static void mapping_test(void)
     puts("scales: all 16 scales, 12 roots, octave/transpose ranges, bypass, drums and SNAP ok");
 }
 
+/* the keys of one block, as events_block runs them: their MIDI out reaches usb.c's ring at its end
+ * (midi_out.c mout_flush) */
+static void keys_block(void)
+{
+    keyboard_block();
+    mout_flush();
+}
+
 static void key_events_test(void)
 {
     track_t *t = &trk[0];
@@ -96,15 +104,15 @@ static void key_events_test(void)
     t->p[P_AMODE] = 1;
     song.playing = song.rec = 1;
     fm1_in.notes = 1u << 8;                /* C# is silent */
-    keyboard_block();
+    keys_block();
     assert(t->arp_phys == 0 && t->nheld == 0 && t->step[0].n == 0 && mo_w == 0);
     t->p[P_QUANT] = 0;                    /* releasing a muted key stays silent */
     fm1_in.notes = 0;
-    keyboard_block();
+    keys_block();
     assert(mo_w == 0);
     t->p[P_QUANT] = 2;
     fm1_in.notes = (1u << 11) | (1u << 10); /* E and D#: only Eb sounds/records */
-    keyboard_block();
+    keys_block();
     assert(t->arp_phys == 1 && t->nheld == 1 && t->held[0] == 63);
     assert(t->step[0].n == 0);             /* ARP on: what it plays is recorded, not the key */
     arp_tick(t, CTL * (uint32_t)song.g[G_BPM]);
@@ -116,19 +124,19 @@ static void key_events_test(void)
     song.octave = 1;
     song.sel = 1;                          /* key-up follows the original note/part */
     fm1_in.notes = 0;
-    keyboard_block();
+    keys_block();
     assert(t->arp_phys == 0 && t->nheld == 0);
     assert(mo_w == 2 && ((midi_out_q[1] >> 16) & 127u) == 63);
     assert(((midi_out_q[1] >> 8) & 255u) == 0x80u);
     song.sel = 0;
     t->p[P_QUANT] = 0;
     fm1_in.notes = 1u << 8;                /* held black key must release after enabling mode */
-    keyboard_block();
+    keys_block();
     before = mo_w;
     assert(t->arp_phys == 1);
     t->p[P_QUANT] = 2;
     fm1_in.notes = 0;
-    keyboard_block();
+    keys_block();
     assert(t->arp_phys == 0 && t->nheld == 0 && mo_w == before + 1);
     puts("scales: silent keys, arp, live recording, MIDI out and held-note changes ok");
 }

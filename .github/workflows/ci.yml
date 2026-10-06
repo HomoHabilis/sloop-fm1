@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Two jobs, so the update path is tested even when JieLi's download server is out of reach:
+#   host      no toolchain: the whole host suite (tests/run_host_tests.sh), the update path replayed
+#             against the released 2.3 package, the freeze of the update-path files, clang's front end
+#             over the firmware with each build option
+#   firmware  the JieLi toolchain (pkgman.jieliapp.com) cross-compiles SLOOP, the full suite runs on
+#             that build (target cost too), its package is checked against 2.3 and kept as an artifact
+# The three AC79 SDK files the package needs come out of the released package (tools/fwsc_unpack.py,
+# checked against tools/build.py's SHA-256s): no SDK checkout from gitee.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python packages
+        run: pip install Pillow
+      - name: Update path frozen
+        run: python3 tests/update_freeze.py
+      - name: Update package against the released 2.3
+        run: python3 tests/pkg_test.py
+      - name: Host tests (no toolchain)
+        env:
+          SOAK_MIN: "3"
+        run: sh tests/run_host_tests.sh
+
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Python packages
+        run: pip install Pillow
+      - name: JieLi toolchain (cached)
+        id: tc
+        uses: actions/cache@v4
+        with:
+          path: ~/.jieli
+          key: jieli-toolchain-v1
+      - name: Download the JieLi toolchain
+        if: steps.tc.outputs.cache-hit != 'true'
+        run: |
+          for i in 1 2 3; do sh tools/get_toolchain.sh && break; sleep $((i * 10)); done
+          test -x ~/.jieli/toolchain/pi32v2/bin/clang
+      - name: AC79 SDK files from the released package
+        run: python3 tools/fwsc_unpack.py docs/firmware/sloop-2.3.fwsc build/standin --sdk-dir "$HOME/ac79-sdk"
+      - name: Build
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          sh build.sh
+      - name: Full test suite on the build
+        env:
+          SOAK_MIN: "3"
+        run: |
+          export AC79_SDK="$HOME/ac79-sdk"
+          sh tests/run_tests.sh
+      - name: Package against the released 2.3 (layout, SDK parts, loader compared)
+        run: python3 tests/pkg_test.py build/felucca.fwsc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sloop-fwsc-${{ github.sha }}
+          path: |
+            build/felucca.fwsc
+            build/felucca.bin
+            build/loader/ota.bin
+          if-no-files-found: error

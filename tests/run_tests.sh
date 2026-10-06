@@ -27,6 +27,11 @@ run() { echo "== $1"; shift; "$@" || fail=1; }
 
 [ -f build/felucca.fwsc ] || { echo "run ./build.sh first"; exit 1; }
 
+run "update path frozen: loader, update entry, rescue, boot, storage, packager, installers (sha256)" \
+    python3 tests/update_freeze.py
+run "update package: the released 2.3 rebuilt byte for byte, damage refused, this build's layout" \
+    python3 tests/pkg_test.py build/felucca.fwsc
+
 $CC -o "$OUT/storage_test" tests/storage_test.c
 run "flash storage (A/B, torn writes)" "$OUT/storage_test"
 
@@ -61,6 +66,8 @@ run "user presets (UP_PUT parser, bank round trip, versions)" "$OUT/upreset_test
 
 $CC -o "$OUT/midi_uart_test" tests/midi_uart_test.c
 run "TRS MIDI parser" "$OUT/midi_uart_test"
+$CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/midi_out_test" tests/midi_out_test.c -lm
+run "MIDI OUT: tracks to external gear, every note-off, clock, no loops, full queue, fuzz" "$OUT/midi_out_test"
 $CC -Ifirmware/hal -o "$OUT/encoder_test" tests/encoder_test.c
 run "knobs: one click = one step (slow, fast, pauses, bounce)" "$OUT/encoder_test"
 HALF=$(sed -n 's/^#define HALF_FRAMES \([0-9]*\).*/\1/p' firmware/src/core.h)

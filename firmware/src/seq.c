@@ -45,6 +45,8 @@ static uint32_t kb_prev;
 /* per key: what its press started, so its release ends the same (whatever the layer or track is now) */
 enum { KS_NONE, KS_NOTE, KS_DRUM, KS_ROLL, KS_ERASE, KS_FX, KS_UI };
 static uint8_t kb_kind[27], kb_trk[27], kb_n[27], kb_nt[27][4];
+static uint32_t kb_echo;                 /* bit per key: its press was echoed to MIDI out (a track on OUT INT) */
+static uint8_t kb_echo_n[27];            /* .. its notes that went out (bit per note of kb_nt) */
 static uint8_t last_note = 60;
 static uint8_t pen_n = 1, pen_note[4] = {60};   /* the last chord / note played: the SEQ layer writes it */
 static uint8_t pen_lane;                       /* the last drum lane played: the SEQ layer's lane */
@@ -1018,8 +1020,9 @@ static void key_down(uint32_t k)
         }
         kb_kind[k] = KS_DRUM;
         drum_input(lane, lvl, 0, 1);
-        mc = trk_midi_ch(sel);
-        midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)LANE_NOTE[lane] << 16 | lvl_vel(lvl, 100) << 24);
+        if (!mout_ext(sel) &&                         /* (OUT MIDI / BOTH: the track's note goes out itself) */
+            mout_echo_on(sel, trk_midi_ch(sel), LANE_NOTE[lane], lvl_vel(lvl, 100)))
+            kb_echo |= 1u << k;
         return;
     }
     {
@@ -1041,10 +1044,14 @@ static void key_down(uint32_t k)
             kb_n[k] = 1;
         }
         mc = trk_midi_ch(sel);
+        kb_echo_n[k] = 0;
         for (i = 0; i < kb_n[k]; i++) {
             input_on(t, kb_nt[k][i], 100);
-            midi_out_event(0x09u | (0x90u | mc) << 8 | (uint32_t)kb_nt[k][i] << 16 | 100u << 24);
+            if (!mout_ext(sel) && mout_echo_on(sel, mc, kb_nt[k][i], 100))
+                kb_echo_n[k] |= (uint8_t)(1u << i);
         }
+        if (kb_echo_n[k])
+            kb_echo |= 1u << k;
         /* the pen of the SEQ layer: the keys down now (a chord), else this note */
         if (!(kb_prev & ~(1u << k)) || pen_n >= 4u)
             pen_n = 0;
@@ -1055,9 +1062,10 @@ static void key_down(uint32_t k)
 
 static void key_up(uint32_t k)
 {
-    uint32_t i, mc, kind = kb_kind[k];
+    uint32_t i, kind = kb_kind[k], echo = (kb_echo >> k) & 1u;
     track_t *t = &trk[kb_trk[k] % NTRK];
     kb_kind[k] = KS_NONE;
+    kb_echo &= ~(1u << k);
     switch (kind) {
     case KS_FX:
         if (punch.keybit == 1u << k) {                /* its key is up: the mix comes back */
@@ -1081,17 +1089,17 @@ static void key_up(uint32_t k)
                 roll_end(i);
         return;
     case KS_NOTE:
-        mc = trk_midi_ch(kb_trk[k] % NTRK);
         for (i = 0; i < kb_n[k]; i++) {
             input_off(t, kb_nt[k][i]);
-            midi_out_event(0x08u | (0x80u | mc) << 8 | (uint32_t)kb_nt[k][i] << 16);
+            if (echo && ((kb_echo_n[k] >> i) & 1u))
+                mout_echo_off(kb_trk[k] % NTRK, kb_nt[k][i]);
         }
         return;
     case KS_DRUM:
         if (ft_on && ft_trk == TRK_DRUM)
             ft_note_off(kb_nt[k][0]);
-        mc = trk_midi_ch(TRK_DRUM);
-        midi_out_event(0x08u | (0x80u | mc) << 8 | (uint32_t)LANE_NOTE[kb_nt[k][0] & 15u] << 16);
+        if (echo)
+            mout_echo_off(TRK_DRUM, LANE_NOTE[kb_nt[k][0] & 15u]);
         return;
     default:
         return;
@@ -1573,6 +1581,7 @@ static uint32_t mclk_adv(uint32_t n)               /* units to advance this bloc
 static void events_block(uint32_t n)
 {
     uint32_t i, pr, adv;
+    mout_block(n);                                  /* MIDI OUT: settings, drum gates, releases */
     if (transport_req == 1u) {
         transport_req = 0;
         if (ft_on) {
@@ -1675,6 +1684,7 @@ static void events_block(uint32_t n)
         if (st != 0x90u && st != 0x80u)
             continue;
         t = midi_route(ch, d1, st == 0x90u && d2);
+        mo_from_usb = ((pkt >> 4) & 15u) == 0u;      /* (not sent back out over USB: a DAW's thru would loop) */
         if (is_drum(t)) {
             if (st == 0x90u && d2)
                 drum_input(lane_of_note(d1), vel_lvl(d2), 0, 1);
@@ -1683,6 +1693,7 @@ static void events_block(uint32_t n)
         } else {
             input_off(t, d1);
         }
+        mo_from_usb = 0;
     }
     for (i = 0; i < NTRK; i++)
         seq_tick(&trk[i], adv);
@@ -1690,6 +1701,8 @@ static void events_block(uint32_t n)
     roll_block(adv);
     for (i = 0; i < NPART; i++)
         arp_tick(&trk[i], adv);
+    mout_clock(adv, n);                             /* (before the clock moves: PLAY is at 0) */
+    mout_flush();
     if (song.playing) {
         song.tick++;
         clk_pos += adv;
