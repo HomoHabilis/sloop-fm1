@@ -813,12 +813,30 @@ async function updater() {
   const back = new FakeFM1(image, { finalIdentity: "FM-1_015" });   /* the return to the official V15, interrupted */
   back.boot("ota-FM-1_015", "FM-1 Update");
   const st = [];
-  const r4 = await new Updater(back.access).resume(image, (k) => st.push(k), { product: "FM-1_015" });
+  const r4 = await new Updater(back.access).resume(image, (k) => st.push(k), { product: "FM-1_015", official: true });
   ok(r4 === true && back.bad === 0 && st.at(-1) === "done", "fm1ota.js: return to official: its own loader resumed, V15 checked when back");
   const wrong = new FakeFM1(image, { finalIdentity: "FM-1_900" });
   wrong.boot("ota-FM-1_015", "FM-1 Update");
-  const e5 = await new Updater(wrong.access).resume(image, null, { product: "FM-1_015" }).then(() => null, (x) => x);
+  const e5 = await new Updater(wrong.access).resume(image, null, { product: "FM-1_015", official: true }).then(() => null, (x) => x);
   ok(e5 && e5.code === "mismatch", "fm1ota.js: return to official: another firmware coming back is not 'done'");
+  /* Install with the FM-1 left in SLOOP's update mode (the page's resume path): "done" only once it is back as SLOOP */
+  const res = new FakeFM1(image);
+  res.boot("ota-FM-1_900", "Felucca Update");
+  const rs = [];
+  const r6 = await new Updater(res.access).resume(image, (k) => rs.push(k), { product: "FM-1_900" });
+  ok(r6 === true && res.bad === 0 && res.identity === "FM-1_900" && rs.at(-1) === "done", "fm1ota.js: resume: SLOOP's loader finished, SLOOP checked when back");
+  const resc = new FakeFM1(image, { finalIdentity: "FM-1_000" });
+  resc.boot("ota-FM-1_900", "Felucca Update");
+  const rs2 = [];
+  const e7 = await new Updater(resc.access).resume(image, (k) => rs2.push(k), { product: "FM-1_900" }).then(() => null, (x) => x);
+  ok(e7?.code === "mismatch" && e7.detail === "FM-1_000" && !rs2.includes("done"), "fm1ota.js: resume: boot into recovery after the write is not 'done'");
+  const fr = new FakeFM1(image);
+  fr.boot("ota-FM-1_015", "FM-1 Update");
+  const e8 = await new Updater(fr.access).resume(image, null, { product: "FM-1_900" }).then(() => null, (x) => x);
+  ok(e8?.code === "foreign" && fr.served === 0, "fm1ota.js: resume: an expected identity never opens another firmware's loader");
+  const page = readFileSync(join(HERE, "index_pkg.html"), "utf8");
+  ok(/up\.resume\(image, step, \{ product: meta\.product \}\)/.test(page) && /\{ product: stock\.product, official: true \}/.test(page)
+    && /fetch\(meta\.pkg, \{ cache: "no-cache" \}\)/.test(page), "installer: resume checks the identity, the package is revalidated");
   const pk = await import(join(HERE, "fm1pkg.js"));
   const notStock = new Uint8Array(pk.STOCK_V15_SIZE);
   const e6 = await pk.validateStockPackage(notStock).then(() => null, (x) => x);

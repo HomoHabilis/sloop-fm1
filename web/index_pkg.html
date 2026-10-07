@@ -194,7 +194,7 @@ window.addEventListener("beforeunload", (e) => { if (writing) { e.preventDefault
 (async () => {
   if (!navigator.requestMIDIAccess) { sayK("nomidi"); return; }
   try {
-    const r = await fetch(meta.pkg);
+    const r = await fetch(meta.pkg, { cache: "no-cache" });   /* revalidated: a package rebuilt under the same name is never the cached one */
     if (!r.ok) throw new Error(`${meta.pkg}: HTTP ${r.status}`);
     const pkg = new Uint8Array(await r.arrayBuffer());
     if (productOf(pkg) !== meta.product) { sayK("badpkg"); return; }
@@ -235,7 +235,7 @@ $("go").addEventListener("click", async () => {
     const ota = await up.find((id) => /^ota-/i.test(id.model));
     if (ota) {
       ota.link.close();
-      sayK((await up.resume(image, step)) ? "done" : "stopped");
+      sayK((await up.resume(image, step, { product: meta.product })) ? "done" : "stopped");   /* "done" only once it is back */
     } else {
       await up.install(image, meta.product, step);
     }
@@ -267,7 +267,7 @@ $("stock-go").addEventListener("click", async () => {
     if (ota) {
       ota.link.close();
       if (OUR_LOADER(ota.id)) sayK("stockFinish");    /* SLOOP's loader: finish SLOOP first (Install) */
-      else sayK((await up.resume(stock.image, step, { product: stock.product })) ? "done" : "stopped");
+      else sayK((await up.resume(stock.image, step, { product: stock.product, official: true })) ? "done" : "stopped");
     } else {
       await up.install(stock.image, stock.product, step);
     }

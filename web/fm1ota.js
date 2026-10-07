@@ -210,14 +210,14 @@ export class Updater {
     return s2;
   }
 
-  // resume: the device is already in update mode (loader) -> true when the write finished. Only SLOOP's
-  // own loader is resumed, except for the return to the official firmware (opts.product: the official
-  // package, its identity checked once the FM-1 is back, after Felucca 1.0): that one is the official
-  // loader's own image, as M-UPGRADE would write it
+  // resume: the device is already in update mode (loader) -> true when the write finished and, with
+  // opts.product, the FM-1 came back reporting that identity (else "noreturn" / "mismatch", as install()).
+  // Only SLOOP's own loader is resumed, except for the return to the official firmware (opts.official,
+  // after Felucca 1.0): that one is the official loader's own image, as M-UPGRADE would write it
   async resume(image, onStep, opts = {}) {
     const ota = await this.find(IS_OTA);
     if (!ota) return false;
-    if (!OUR_LOADER(ota.id) && !opts.product) {
+    if (!OUR_LOADER(ota.id) && !opts.official) {
       ota.link.close();
       throw fail("foreign", `the FM-1 is in the update mode of another firmware (${ota.id.text}): finish that update with its own updater`, ota.id.text);
     }
